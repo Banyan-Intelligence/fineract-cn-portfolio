@@ -25,6 +25,8 @@ RUN ./gradlew publishToMavenLocal
 FROM openjdk:8-jdk-alpine AS runner
 
 ARG portfolio_port=2026
+ARG jmx_port=9016
+ARG jmx_prome_port=8086
 
 ENV server.max-http-header-size=16384 \
     cassandra.clusterName="Test Cluster" \
@@ -33,5 +35,16 @@ ENV server.max-http-header-size=16384 \
 
 WORKDIR /tmp
 COPY --from=builder /builddir/service/build/libs/service-0.1.0-BUILD-SNAPSHOT-boot.jar ./portfolio-service-boot.jar
+COPY jmx_prometheus_javaagent-0.20.0.jar /tmp/jmx_prometheus_javaagent-0.20.0.jar
+COPY jmx_config.yaml /tmp/jmx_config.yaml
 
-CMD ["java", "-jar", "portfolio-service-boot.jar"]
+# CMD ["java", "-jar", "portfolio-service-boot.jar"]
+EXPOSE $jmx_prome_port
+ENV JAVA_OPTS="-Dcom.sun.management.jmxremote \
+               -Dcom.sun.management.jmxremote.port=$jmx_port \
+               -Dcom.sun.management.jmxremote.rmi.port=$jmx_port \
+               -Dcom.sun.management.jmxremote.authenticate=false \
+               -Dcom.sun.management.jmxremote.ssl=false \
+               -Djava.rmi.server.hostname=0.0.0.0"
+
+ENTRYPOINT exec java $JAVA_OPTS -javaagent:"jmx_prometheus_javaagent-0.20.0.jar=8086:jmx_config.yaml" -jar portfolio-service-boot.jar
